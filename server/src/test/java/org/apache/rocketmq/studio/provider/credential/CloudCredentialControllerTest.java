@@ -29,11 +29,13 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(CloudCredentialController.class)
@@ -81,7 +83,11 @@ class CloudCredentialControllerTest {
                 .thenReturn(PageResult.empty(1, 20));
 
         mockMvc.perform(get("/api/cloud-credentials"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.data.total").value(0))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(20));
         verify(credentialService).listMasked(null, null, 1, 20);
     }
 
@@ -105,7 +111,13 @@ class CloudCredentialControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"id\":\"7\"}"))
                 .andExpect(status().isOk());
-        verify(credentialService).delete(7L);
+        // The API contract documents the flexible id form, so the numeric spelling must reach the
+        // service as the same target id.
+        mockMvc.perform(post("/api/cloud-credentials/delete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\":7}"))
+                .andExpect(status().isOk());
+        verify(credentialService, times(2)).delete(7L);
     }
 
     @Test

@@ -29,6 +29,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
@@ -39,6 +40,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({AclController.class, CloudCredentialController.class})
@@ -109,6 +111,28 @@ class AuthCredentialAuthorizationIntegrationTest {
 
         verify(aclService).getUserCredentials(eq("user-1"), isNull());
         verify(cloudCredentialService).reveal(12L);
+    }
+
+    @Test
+    void shouldRejectUnauthenticatedCloudCredentialMutations() throws Exception {
+        // The credential endpoints manage cloud AK/SK pairs, so an unauthenticated caller must not
+        // be able to create, rotate or delete them even though the controller slice itself has no
+        // security annotations.
+        mockMvc.perform(post("/api/cloud-credentials/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"production\",\"vendor\":\"aliyun\","
+                                + "\"accessKey\":\"cloud-access-key\",\"secretKey\":\"cloud-secret-key\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/cloud-credentials/update")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\":1,\"secretKey\":\"rotated-cloud-secret\"}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/cloud-credentials/delete")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\":1}"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(cloudCredentialService);
     }
 
     private LoginVO.UserInfo user(boolean admin) {
